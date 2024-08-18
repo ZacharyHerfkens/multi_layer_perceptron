@@ -1,11 +1,9 @@
 ### A simple implementation of a multi-layer perceptron trained using stocastic gradient decent
 from __future__ import annotations
 from dataclasses import dataclass, field
-import math
 from typing import Callable
 import numpy as np
 from numpy.typing import NDArray
-from regex import B
 
 type arr = NDArray[np.float32]
 
@@ -22,7 +20,7 @@ class Layer:
         return Layer(w, b, s)
     
     def forward(self, x: arr) -> arr:
-        return self.s(x @ self.w + self.b)
+        return self.s(self.w @ x + self.b)
     
 
 @dataclass(frozen=True)
