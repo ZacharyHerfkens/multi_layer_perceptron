@@ -35,5 +35,5 @@ class Optimizer:
         
         return best[0]
     
-    def test(self, mlp: MLP) -> float:
-        return self._test_chunk(mlp, self.data)
+    def test(self, mlp: MLP, /, data: list[tuple[arr, arr]] | None = None) -> float:
+        return self._test_chunk(mlp, data or self.data)
