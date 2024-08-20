@@ -31,7 +31,7 @@ class MLP:
     def mutate(self, scale: float, rate: float) -> MLP:
         mut_layers = []
         for layer in self.layers:
-            mut_w = layer.w + np.random.randn(*layer.w.shape) * rate
-            mut_b = layer.b + np.random.randn(*layer.b.shape) * rate
+            mut_w = layer.w + np.random.randn(*layer.w.shape) * scale * (np.random.rand(*layer.w.shape) < rate)
+            mut_b = layer.b + np.random.randn(*layer.b.shape) * scale * (np.random.rand(*layer.b.shape) < rate)
             mut_layers.append(Layer(mut_w, mut_b, layer.s))
         return MLP(mut_layers)

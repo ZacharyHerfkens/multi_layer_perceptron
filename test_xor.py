@@ -20,14 +20,14 @@ def main():
         Layer.random(3, 1, s=sigmoid)
     ])
 
-    opt = Optimizer(data)
+    opt = Optimizer(data, mut_rate=0.5, mut_scale=0.1)
 
     trained = opt.optimize(untrained)
 
     for x, y in data:
         y_untrained = untrained.forward(x)
         y_trained = trained.forward(x)
-        print(f"{x} ->\n\tuntrained - \t{y_untrained}\n\ttrained - \t{y_trained}")
+        print(f"{x} -> {y}\n\tuntrained - \t{y_untrained}\n\ttrained - \t{y_trained}")
     
     print(f"cost - untrained: {opt.test(untrained)}, trained: {opt.test(trained)}")
 
