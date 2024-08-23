@@ -1,4 +1,5 @@
 from __future__ import annotations
+from itertools import chain
 from multiprocessing.connection import PipeConnection
 import random
 from multiprocessing import Manager, Process, Pipe
@@ -27,26 +28,25 @@ class Optimizer:
         return random.sample(data, k=self.batch_size)        
 
     @staticmethod
-    def _test_batch(mlp: MLP, batch: Data) -> float:
+    def test(mlp: MLP, batch: Data) -> float:
         return sum(sum((y - mlp.forward(x))**2) for x, y in batch)
 
     def optimize(self, mlp: MLP, data: Data) -> MLP:
-        batch = self._random_batch(data)
-        best = (mlp, self._test_batch(mlp, batch))
+        best = self._single_step_optimize(mlp, data)
 
-        for _ in range(self.epochs):
-            candidates = (best[0].mutate(self.mut_scale, self.mut_rate) for _ in range(self.attempts))
-            results = ((c, self._test_batch(c, batch)) for c in candidates)
-            best = min(*results, best, key=lambda t: t[1])
-            batch = self._random_batch(data)
+        for _ in range(1, self.epochs):
+            best = self._single_step_optimize(best[0], data)
         
         return best[0]
     
     def optimize_async(self, mlp: MLP, data: Data) -> OptimizerJob:
         return OptimizerJob(self, mlp, data)
     
-    def test(self, mlp: MLP, data: Data) -> float:
-        return self._test_batch(mlp, data)
+    def _single_step_optimize(self, mlp: MLP, data: Data) -> tuple[MLP, float]:
+        batch = self._random_batch(data)
+        candidates = chain((mlp,), (mlp.mutate(self.mut_scale, self.mut_rate) for _ in range(self.attempts)))
+        results = ((c, self.test(c, batch)) for c in candidates)
+        return min(results, key=lambda t: t[1])
 
 
 @dataclass(init=False)
@@ -61,6 +61,4 @@ class OptimizerJob:
 
     def wait_done(self) -> MLP:
         self.proc.join()
-        mlp = self.recv.recv()
-        self.recv.close()
-        return mlp 
+        return self.recv.recv() 
