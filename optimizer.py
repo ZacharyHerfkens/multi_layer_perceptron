@@ -1,9 +1,16 @@
 from __future__ import annotations
+from multiprocessing.connection import PipeConnection
 import random
+from multiprocessing import Manager, Process, Pipe
 from prelude import *
 from mlp import MLP
 
 type Data = list[tuple[arr, arr]]
+
+def _optimize_async(conn: PipeConnection, opt: Optimizer, mlp: MLP, data: Data) -> None:
+    opt_mlp = opt.optimize(mlp, data)
+    conn.send(opt_mlp)
+
 
 @dataclass(frozen=True, kw_only=True)
 class Optimizer:
@@ -35,5 +42,25 @@ class Optimizer:
         
         return best[0]
     
+    def optimize_async(self, mlp: MLP, data: Data) -> OptimizerJob:
+        return OptimizerJob(self, mlp, data)
+    
     def test(self, mlp: MLP, data: Data) -> float:
         return self._test_batch(mlp, data)
+
+
+@dataclass(init=False)
+class OptimizerJob:
+    recv: PipeConnection
+    proc: Process
+
+    def __init__(self, opt: Optimizer, mlp: MLP, data: Data) -> None:
+        self.recv, send = Pipe(duplex=False)
+        self.proc = Process(target=_optimize_async, args=(send, opt, mlp, data))
+        self.proc.start()
+
+    def wait_done(self) -> MLP:
+        self.proc.join()
+        mlp = self.recv.recv()
+        self.recv.close()
+        return mlp 

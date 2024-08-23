@@ -2,10 +2,16 @@ from __future__ import annotations
 from prelude import *
 from mlp import MLP, Layer
 from optimizer import Optimizer
+from multiprocessing import Process, Pipe
 
 
 def sigmoid(x: np.ndarray) -> np.ndarray:
     return 1 / (1 + np.exp(-x))
+
+def do_optimize(conn, optimizer: Optimizer, mlp: MLP, data: list[tuple[arr, arr]]) -> None:
+    trained = optimizer.optimize(mlp, data)
+    conn.send(trained)
+
 
 def main():
     data = [
@@ -22,7 +28,7 @@ def main():
 
     opt = Optimizer(mut_rate=0.5, mut_scale=0.1)
 
-    trained = opt.optimize(untrained, data)
+    trained = opt.optimize_async(untrained, data).wait_done()
 
     for x, y in data:
         y_untrained = untrained.forward(x)
