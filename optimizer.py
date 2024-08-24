@@ -1,8 +1,6 @@
 from __future__ import annotations
 from itertools import chain
-from multiprocessing.connection import PipeConnection
 import random
-from multiprocessing import Manager, Process, Pipe
 from typing import Callable
 from prelude import *
 from mlp import MLP
@@ -10,80 +8,42 @@ from mlp import MLP
 type Data = list[tuple[arr, arr]]
 
 
-def _optimize_async(conn: PipeConnection, opt: Optimizer, mlp: MLP, data: Data) -> None:
-    def on_epoch_done(mlp: MLP, epoch: int, cost: float) -> None:
-        if conn.poll():
-            match conn.recv():
-                case "data":
-                    conn.send({"mlp": mlp, "epoch": epoch, "cost": cost})
-                case _:
-                    conn.send({})
-
-    opt_mlp = opt.optimize(mlp, data, on_epoch_done=on_epoch_done)
-    conn.send(opt_mlp)
-
-
 @dataclass(frozen=True, kw_only=True)
-class Optimizer:
+class OptimizerSettings:
     epochs: int = 1000
-    attempts: int = 25
     batch_size: int | None = None
-    mut_rate: float = 0.1
-    mut_scale: float = 0.01
+    samples: int = 25
+    mut_rate: float = 0.5
+    mut_scale: float = 0.1
+    on_epoch_complete: Callable[[int, MLP, float], None] | None = None
 
-    def _random_batch(self, data: Data) -> Data:
-        if self.batch_size is None:
+
+def test(candidate: MLP, batch: Data) -> float:
+    return sum(sum((y - candidate.forward(x)) ** 2) for x, y in batch)
+
+
+def optimize(settings: OptimizerSettings, init: MLP, data: Data) -> MLP:
+    def random_batch() -> Data:
+        if settings.batch_size is None:
             return data
+        return random.sample(data, settings.batch_size)
 
-        return random.sample(data, k=self.batch_size)
-
-    @staticmethod
-    def test(mlp: MLP, batch: Data) -> float:
-        return sum(sum((y - mlp.forward(x)) ** 2) for x, y in batch)
-
-    def optimize(
-        self,
-        mlp: MLP,
-        data: Data,
-        /,
-        on_epoch_done: Callable[[MLP, int, float], None] | None = None,
-    ) -> MLP:
-        best = self._single_step_optimize(mlp, data)
-
-        for epoch in range(1, self.epochs):
-            best = self._single_step_optimize(best[0], data)
-            if on_epoch_done is not None:
-                on_epoch_done(best[0], epoch, best[1])
-
-        return best[0]
-
-    def optimize_async(self, mlp: MLP, data: Data) -> OptimizerJob:
-        return OptimizerJob(self, mlp, data)
-
-    def _single_step_optimize(self, mlp: MLP, data: Data) -> tuple[MLP, float]:
-        batch = self._random_batch(data)
+    def step(seed: MLP) -> tuple[MLP, float]:
+        batch = random_batch()
         candidates = chain(
-            (mlp,),
-            (mlp.mutate(self.mut_scale, self.mut_rate) for _ in range(self.attempts)),
+            (seed,),
+            (
+                seed.mutate(settings.mut_scale, settings.mut_rate)
+                for _ in range(settings.samples)
+            ),
         )
-        results = ((c, self.test(c, batch)) for c in candidates)
-        return min(results, key=lambda t: t[1])
+        tests = ((c, test(c, batch)) for c in candidates)
+        return min(tests, key=lambda t: t[1])
 
+    best = init
+    for epoch in range(settings.epochs):
+        best, cost = step(best)
+        if settings.on_epoch_complete:
+            settings.on_epoch_complete(epoch, best, cost)
 
-@dataclass(init=False)
-class OptimizerJob:
-    conn: PipeConnection
-    proc: Process
-
-    def __init__(self, opt: Optimizer, mlp: MLP, data: Data) -> None:
-        self.conn, child = Pipe()
-        self.proc = Process(target=_optimize_async, args=(child, opt, mlp, data))
-        self.proc.start()
-
-    def data(self) -> dict:
-        self.conn.send("data")
-        return self.conn.recv()
-
-    def wait_done(self) -> MLP:
-        self.proc.join()
-        return self.conn.recv()
+    return best
