@@ -3,6 +3,21 @@ from __future__ import annotations
 from prelude import *
 from typing import Callable
 
+
+class MlpMutator:
+    def __init__(self, rate: float = 0.1, scale: float = 0.05) -> None:
+        self.rate = rate
+        self.scale = scale
+    
+    def mutate(self, item: MLP) -> MLP:
+        return item.mutate(self.scale, self.rate)
+
+
+class MlpEvaluator:
+    def eval(self, candidate: MLP, data: Data) -> float:
+        return sum(sum((y - candidate.forward(x))**2) for x, y in data)
+
+
 @dataclass(frozen=True)
 class Layer:
     w: arr

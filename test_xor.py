@@ -1,7 +1,7 @@
 from __future__ import annotations
 from prelude import *
-from mlp import MLP, Layer
-from optimizer import OptimizerSettings, optimize, test
+from mlp import MLP, Layer, MlpEvaluator, MlpMutator
+from optimizer import optimize, ListData
 
 
 def sigmoid(x: np.ndarray) -> np.ndarray:
@@ -26,18 +26,18 @@ def main():
         for (x, y) in data
     ]
     untrained = MLP([Layer.random(2, 3), Layer.random(3, 1, s=sigmoid)])
-
-    settings = OptimizerSettings(on_epoch_complete=print_progress)
+    mutator = MlpMutator()
+    eval = MlpEvaluator()
 
     print("begin training...")
-    trained = optimize(settings, untrained, data)
+    trained = optimize(untrained, ListData(data), mutator, eval, on_epoch_complete=print_progress)
 
     for x, y in data:
         y_untrained = untrained.forward(x)
         y_trained = trained.forward(x)
         print(f"{x} -> {y}\n\tuntrained - \t{y_untrained}\n\ttrained - \t{y_trained}")
 
-    print(f"cost - untrained: {test(untrained, data)}, trained: {test(trained, data)}")
+    print(f"cost - untrained: {eval.eval(untrained, data)}, trained: {eval.eval(trained, data)}")
 
 
 if __name__ == "__main__":
